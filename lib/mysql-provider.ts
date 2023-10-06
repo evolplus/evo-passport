@@ -1,7 +1,7 @@
 import mysql, { Pool, PoolConfig } from "mysql";
 import { generateSessionId, generateUserId, PassportModel, Session, UserAccount } from "./model";
 import log4js from "log4js-api";
-import { OAuth2Profile, TokenData } from "evo-oauth2";
+import { OAuth2Profile, TokenData } from "@evolplus/evo-oauth2";
 
 const LOGGER = log4js.getLogger("evo-passport-mysql");
 const TABLE_NAME_ACCOUNTS = "accounts";

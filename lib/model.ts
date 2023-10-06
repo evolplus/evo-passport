@@ -1,5 +1,5 @@
 import { randomBytes, randomInt } from "crypto";
-import { OAuth2Profile, TokenData } from "evo-oauth2";
+import { OAuth2Profile, TokenData } from "@evolplus/evo-oauth2";
 
 const MAX_ID = 281474976710655; // 2^48 - 1
 const SESSION_PREFIX_LENGTH = 6;

@@ -1,6 +1,6 @@
 import log4js from 'log4js-api';
 import { Application, Request, Response } from 'express';
-import { OAuth2Client, OAuth2Profile, OAuth2ProviderConfiguration, TokenData, SupportedOAuth2Provider, getConfigurationByProvider, OAuth2Provider } from 'evo-oauth2';
+import { OAuth2Client, OAuth2Profile, OAuth2ProviderConfiguration, TokenData, SupportedOAuth2Provider, getConfigurationByProvider, OAuth2Provider } from '@evolplus/evo-oauth2';
 
 let logger = log4js.getLogger('oauth');
 

@@ -2,7 +2,7 @@ import { Application, NextFunction, Request, Response } from 'express';
 import MySqlPassportModel from './mysql-provider';
 import PassportModel, { Session, validateSessionId } from './model';
 import { createConfiguration, installProvider, SignedInCallback } from './oauth';
-import { OAuth2Profile, OAuth2Provider, TokenData } from 'evo-oauth2';
+import { OAuth2Profile, OAuth2Provider, TokenData } from '@evolplus/evo-oauth2';
 import log4js from 'log4js-api';
 
 const COOKIE_NAME_SESSION_ID = "epssid";
