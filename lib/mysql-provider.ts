@@ -3,10 +3,11 @@ import { generateSessionId, generateUserId, PassportModel, Session, UserAccount 
 import log4js from "log4js-api";
 import { OAuth2Profile, TokenData } from "@evolplus/evo-oauth2";
 
-const LOGGER = log4js.getLogger("evo-passport-mysql");
 const TABLE_NAME_ACCOUNTS = "accounts";
 const TABLE_NAME_SESIONS = "sessions";
 const TABLE_NAME_OAUTH = "oauth";
+
+let logger = log4js.getLogger("evo-passport-mysql");
 
 function dataToSession(data: any): Session | undefined {
     if (Array.isArray(data)) {
@@ -38,7 +39,7 @@ export class MySqlPassportModel implements PassportModel {
         return new Promise((resolve, reject) => {
             conn.query(sql, values, (err, result) => {
                 if (err) {
-                    LOGGER.error(`Error while executing query. SQL: ${sql}. Error: ${err}`);
+                    logger.error(`Error while executing query. SQL: ${sql}. Error: ${err}`);
                     reject(err);
                 } else {
                     resolve(result);
