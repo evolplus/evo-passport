@@ -6,7 +6,7 @@ let logger = log4js.getLogger('oauth');
 
 const PROVIDERS: { [key in SupportedOAuth2Provider]: OAuth2ProviderConfiguration } = {
     google: getConfigurationByProvider('google', process.env.GOOGLE_OAUTH2_CLIENT_ID || '', process.env.GOOGLE_OAUTH2_CLIENT_SECRET || ''),
-    facebook: getConfigurationByProvider('google', process.env.FACEBOOK_OAUTH2_CLIENT_ID || '', process.env.FACEBOOK_OAUTH2_CLIENT_SECRET || ''),
+    facebook: getConfigurationByProvider('facebook', process.env.FACEBOOK_OAUTH2_CLIENT_ID || '', process.env.FACEBOOK_OAUTH2_CLIENT_SECRET || ''),
     strava: getConfigurationByProvider('strava', process.env.STRAVA_OAUTH2_CLIENT_ID || '', process.env.STRAVA_OAUTH2_CLIENT_SECRET || '')
 };
 
