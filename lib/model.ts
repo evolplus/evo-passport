@@ -23,8 +23,9 @@ export interface PassportModel {
     generateSession(user: UserAccount): Promise<Session>;
     queryOAuthMapping(provider: string, sub: string): Promise<UserAccount | undefined>;
     getAccountInfo(userId: number): Promise<UserAccount | undefined>;
-    getOrCreateAccount(provider: string, token: TokenData, userInfo: OAuth2Profile): Promise<UserAccount>
-    saveToken(userId: number, provider: string, token: TokenData): void;
+    getOrCreateAccount(provider: string, token: TokenData | undefined, userInfo: OAuth2Profile): Promise<UserAccount>
+    saveToken(userId: number, provider: string, token: TokenData): Promise<void>;
+    loadToken(userId: number, provider: string): Promise<TokenData | undefined>;
 }
 
 export function generateUserId(): number {

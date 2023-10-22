@@ -7,7 +7,7 @@ const TABLE_NAME_ACCOUNTS = "accounts";
 const TABLE_NAME_SESIONS = "sessions";
 const TABLE_NAME_OAUTH = "oauth";
 
-let logger = log4js.getLogger("evo-passport-mysql");
+const LOGGER = log4js.getLogger("evo-passport-mysql");
 
 function dataToSession(data: any): Session | undefined {
     if (Array.isArray(data)) {
@@ -39,7 +39,7 @@ export class MySqlPassportModel implements PassportModel {
         return new Promise((resolve, reject) => {
             conn.query(sql, values, (err, result) => {
                 if (err) {
-                    logger.error(`Error while executing query. SQL: ${sql}. Error: ${err}`);
+                    LOGGER.error(`Error while executing query. SQL: ${sql}. Error: ${err}`);
                     reject(err);
                 } else {
                     resolve(result);
@@ -49,7 +49,9 @@ export class MySqlPassportModel implements PassportModel {
     }
 
     async saveToken(userId: number, provider: string, token: TokenData) {
-        return await this.query(`UPDATE ${TABLE_NAME_OAUTH} SET token=? WHERE user_id=? AND provider=?`, [JSON.stringify(token), userId, provider]);
+        let rs = await this.query(`UPDATE ${TABLE_NAME_OAUTH} SET token=? WHERE user_id=? AND provider=?`, [JSON.stringify(token), userId, provider]);
+        LOGGER.info(`Save token of user ${userId} successfully.`);
+        return rs;
     }
 
 
@@ -63,6 +65,7 @@ export class MySqlPassportModel implements PassportModel {
     async saveSessionData(session: Session): Promise<boolean> {
         try {
             await this.query(`INSERT INTO ${TABLE_NAME_SESIONS}(id, user_id, created) VALUES(?,?,?)`, [session.sessionId, session.user.userId, Date.now()]);
+            LOGGER.info(`Save session  ${session.sessionId} successfully.`);
             return true;
         } catch (err) {
             return false;
@@ -75,6 +78,7 @@ export class MySqlPassportModel implements PassportModel {
             user: user
         };
         await this.saveSessionData(session);
+        LOGGER.info(`Generated new session: ${session.sessionId}.`);
         return session;
     }
 
@@ -98,7 +102,7 @@ export class MySqlPassportModel implements PassportModel {
         return undefined;
     }
 
-    async getOrCreateAccount(provider: string, token: TokenData, userInfo: OAuth2Profile): Promise<UserAccount> {
+    async getOrCreateAccount(provider: string, token: TokenData | undefined, userInfo: OAuth2Profile): Promise<UserAccount> {
         let acc = await this.queryOAuthMapping(provider, userInfo.sub!);
         if (acc) {
             if (token) {
@@ -122,16 +126,26 @@ export class MySqlPassportModel implements PassportModel {
             account.display_name = `${provider}-${userInfo.sub}`
         }
         await this.query(`INSERT INTO ${TABLE_NAME_ACCOUNTS} SET ?`, account);
-        await this.query(`INSERT INTO ${TABLE_NAME_OAUTH} SET ?`, {
-            provider: provider,
-            sub: userInfo.sub,
-            user_id: account.id,
-            token: JSON.stringify(token)
-        });
+        if (token) {
+            await this.query(`INSERT INTO ${TABLE_NAME_OAUTH} SET ?`, {
+                provider: provider,
+                sub: userInfo.sub,
+                user_id: account.id,
+                token: JSON.stringify(token)
+            });
+            LOGGER.info(`Created or update OAuth 2.0 profile: ${provider}/${userInfo.sub}.`);
+        }
         return {
             userId: account.id,
             profilePic: account.picture,
             displayName: account.display_name
+        }
+    }
+
+    async loadToken(userId: number, provider: string): Promise<TokenData | undefined> {
+        let rs = await this.query(`SELECT * FROM ${TABLE_NAME_OAUTH} WHERE user_id=? AND provider=?`, [userId, provider]);
+        if (rs && rs[0]) {
+            return rs[0] as TokenData;
         }
     }
 }
