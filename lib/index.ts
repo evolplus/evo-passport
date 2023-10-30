@@ -81,15 +81,14 @@ function setup(app: Application, passportModel: PassportModel, host: string, pre
                     session = await passportModel.generateSession(account);
                 res.cookie(COOKIE_NAME_SESSION_ID, session.sessionId, DEFAULT_SESSION_COOKIES_SETTINGS);
                 res.cookie(COOKIE_NAME_USER_ID, account.userId, DEFAULT_SESSION_COOKIES_SETTINGS);
-            } else if (req.session && token) {
-                await passportModel.saveToken(req.session.user.userId, provider, token);
+            } else if (req.session && token && userInfo.sub) {
+                await passportModel.saveToken(req.session.user.userId, provider, userInfo.sub, token);
             }
             if (callback) {
                 callback(provider, token, userInfo, req, res);
-            } else {
-                res.redirect('/');
             }
-            if (!res.writableEnded) {
+            if (!(res.writableEnded || res.headersSent)) {
+                res.redirect('/');
                 res.end();
             }
         });

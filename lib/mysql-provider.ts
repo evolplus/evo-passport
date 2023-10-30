@@ -33,7 +33,6 @@ export class MySqlPassportModel implements PassportModel {
     constructor(config: PoolConfig) {
         this.connPool = mysql.createPool(config);
     }
-
     private async query(sql: string, values: any): Promise<any> {
         const conn: Pool = this.connPool;
         return new Promise((resolve, reject) => {
@@ -48,8 +47,10 @@ export class MySqlPassportModel implements PassportModel {
         });
     }
 
-    async saveToken(userId: number, provider: string, token: TokenData) {
-        let rs = await this.query(`UPDATE ${TABLE_NAME_OAUTH} SET token=? WHERE user_id=? AND provider=?`, [JSON.stringify(token), userId, provider]);
+    async saveToken(userId: number, provider: string, sub: string, token: TokenData) {
+        let rs = await this.query(`INSERT INTO ${TABLE_NAME_OAUTH} SET ? ON DUPLICATE KEY UPDATE ?`, [
+            { token: JSON.stringify(token), user_id: userId, provider, sub },
+            { token: JSON.stringify(token) }]);
         LOGGER.info(`Save token of user ${userId} successfully.`);
         return rs;
     }
@@ -105,8 +106,8 @@ export class MySqlPassportModel implements PassportModel {
     async getOrCreateAccount(provider: string, token: TokenData | undefined, userInfo: OAuth2Profile): Promise<UserAccount> {
         let acc = await this.queryOAuthMapping(provider, userInfo.sub!);
         if (acc) {
-            if (token) {
-                await this.saveToken(acc.userId, provider, token);
+            if (token && userInfo.sub) {
+                await this.saveToken(acc.userId, provider, userInfo.sub, token);
             }
             return acc;
         }
@@ -127,12 +128,7 @@ export class MySqlPassportModel implements PassportModel {
         }
         await this.query(`INSERT INTO ${TABLE_NAME_ACCOUNTS} SET ?`, account);
         if (token) {
-            await this.query(`INSERT INTO ${TABLE_NAME_OAUTH} SET ?`, {
-                provider: provider,
-                sub: userInfo.sub,
-                user_id: account.id,
-                token: JSON.stringify(token)
-            });
+            await this.saveToken(account.id, provider, userInfo.sub!, token);
             LOGGER.info(`Created or update OAuth 2.0 profile: ${provider}/${userInfo.sub}.`);
         }
         return {
@@ -148,6 +144,24 @@ export class MySqlPassportModel implements PassportModel {
             return rs[0] as TokenData;
         }
     }
+
+    async queryToken(provider: string, sub: string): Promise<TokenData | undefined> {
+        let rs = await this.query(`SELECT * FROM ${TABLE_NAME_OAUTH} WHERE sub=? AND provider=?`, [sub, provider]);
+        if (rs && rs[0]) {
+            return rs[0] as TokenData;
+        }
+    }
+
+    async queryProfile(provider: string, userId: number): Promise<OAuth2Profile | undefined> {
+        let rs = await this.query(`SELECT * FROM ${TABLE_NAME_OAUTH} WHERE user_id=? AND provider=?`, [userId, provider]);
+        if (rs && rs[0]) {
+            // TODO: save external profile & return it here
+            return {
+                sub: rs[0].sub
+            }
+        }
+    }
+
 }
 
 export default MySqlPassportModel
