@@ -148,7 +148,7 @@ export class MySqlPassportModel implements PassportModel {
     async queryToken(provider: string, sub: string): Promise<TokenData | undefined> {
         let rs = await this.query(`SELECT * FROM ${TABLE_NAME_OAUTH} WHERE sub=? AND provider=?`, [sub, provider]);
         if (rs && rs[0]) {
-            return rs[0] as TokenData;
+            return JSON.parse(rs[0].token) as TokenData;
         }
     }
 
