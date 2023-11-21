@@ -10,7 +10,7 @@ import { LoginConfiguration, setupLogin } from './login';
 const COOKIE_NAME_SESSION_ID = "epssid";
 const COOKIE_NAME_USER_ID = "epuid";
 const DEFAULT_SESSION_CACHE_CAPACITY = 10000;
-const DEFAULT_SESSION_COOKIES_SETTINGS = {httpOnly: true, maxAge: 30 * 86400000};
+const DEFAULT_SESSION_COOKIES_SETTINGS = { httpOnly: true, maxAge: 30 * 86400000 };
 
 const LOGGER = log4js.getLogger('passport');
 
@@ -20,6 +20,12 @@ declare global {
             session?: Session;
         }
     }
+}
+
+export type WebPassportConfig = {
+    passportHost: string;
+    domain: string;
+    prefix: string;
 }
 
 function expressMiddleware(model: PassportModel) {
@@ -68,40 +74,54 @@ function expressMiddleware(model: PassportModel) {
     }
 }
 
-function setup(app: Application, passportModel: PassportModel, host: string, prefix: string, providers: OAuth2Provider[], useAsSession?: { [key: string]: boolean }, callback?: SignedInCallback, loginConfig?: LoginConfiguration) {
-    if (!prefix.endsWith("/")) {
-        prefix += "/";
-    }
+function setupSessionParser(app: Application, model: PassportModel) {
+    app.use(expressMiddleware(model));
+}
+
+function setup(app: Application, passportModel: PassportModel, config: WebPassportConfig, providers: OAuth2Provider[], useAsSession?: { [key: string]: boolean }, callback?: SignedInCallback, loginConfig?: LoginConfiguration) {
+    let prefix = config.prefix.endsWith("/") ? config.prefix : config.prefix + "/",
+        host = config.passportHost,
+        cookieSettings = Object.assign({}, DEFAULT_SESSION_COOKIES_SETTINGS, { domain: config.domain });
     app.use(expressMiddleware(passportModel));
     for (let p of providers) {
         let conf = createConfiguration(p);
-        installProvider(app, host, prefix, conf, async (provider: string, token: TokenData | undefined, userInfo: OAuth2Profile, req, res) => {
-            if (useAsSession && useAsSession[conf.providerName]) {
-                let account = await passportModel.getOrCreateAccount(provider, token, userInfo),
-                    session = await passportModel.generateSession(account);
-                res.cookie(COOKIE_NAME_SESSION_ID, session.sessionId, DEFAULT_SESSION_COOKIES_SETTINGS);
-                res.cookie(COOKIE_NAME_USER_ID, account.userId, DEFAULT_SESSION_COOKIES_SETTINGS);
-            } else if (req.session && token && userInfo.sub) {
-                await passportModel.saveToken(req.session.user.userId, provider, userInfo.sub, token);
-            }
-            if (callback) {
-                callback(provider, token, userInfo, req, res);
-            }
-            if (!(res.writableEnded || res.headersSent)) {
-                res.redirect('/');
-                res.end();
+        installProvider(app, host, prefix, conf, async (provider: string, token: TokenData | undefined, userInfo: OAuth2Profile | undefined, req, res) => {
+            if (userInfo) {
+                if (useAsSession && useAsSession[conf.providerName]) {
+                    let account = await passportModel.getOrCreateAccount(provider, token, userInfo),
+                        session = await passportModel.generateSession(account);
+                    res.cookie(COOKIE_NAME_SESSION_ID, session.sessionId, cookieSettings);
+                    res.cookie(COOKIE_NAME_USER_ID, account.userId, cookieSettings);
+                } else if (req.session && token && userInfo.sub) {
+                    await passportModel.saveToken(req.session.user.userId, provider, userInfo.sub, token);
+                }
+                if (callback) {
+                    callback(provider, token, userInfo, req, res);
+                }
+                if (!(res.writableEnded || res.headersSent)) {
+                    res.redirect('/');
+                    res.end();
+                }
+            } else {
+                LOGGER.error(`Failed to get profile from ${provider}.`);
+                res.status(500).send('Internal Server Error');
             }
         });
     }
     app.get('/logout', (req, res) => {
-        res.cookie(COOKIE_NAME_SESSION_ID, "", { maxAge: 0 });
-        res.cookie(COOKIE_NAME_USER_ID, "", { maxAge: 0 });
-        res.redirect('/');
+        res.cookie(COOKIE_NAME_SESSION_ID, "", { maxAge: 0, domain: config.domain });
+        res.cookie(COOKIE_NAME_USER_ID, "", { maxAge: 0, domain: config.domain });
+        if (callback) {
+            callback('logout', undefined, undefined, req, res);
+        }
+        if (!(res.writableEnded || res.headersSent)) {
+            res.redirect('/');
+        }
     });
     if (loginConfig) {
         setupLogin(app, passportModel, host, prefix, loginConfig, (profile: OAuth2Profile, session: Session, req: Request, res: Response) => {
-            res.cookie(COOKIE_NAME_SESSION_ID, session.sessionId, DEFAULT_SESSION_COOKIES_SETTINGS);
-            res.cookie(COOKIE_NAME_USER_ID, session.user.userId, DEFAULT_SESSION_COOKIES_SETTINGS);
+            res.cookie(COOKIE_NAME_SESSION_ID, session.sessionId, cookieSettings);
+            res.cookie(COOKIE_NAME_USER_ID, session.user.userId, cookieSettings);
             if (callback) {
                 callback('email', undefined, profile, req, res);
             }
@@ -109,4 +129,4 @@ function setup(app: Application, passportModel: PassportModel, host: string, pre
     }
 }
 
-export { PassportModel, MySqlPassportModel, Session, LoginConfiguration, setup };
+export { PassportModel, MySqlPassportModel, Session, LoginConfiguration, setup, setupSessionParser };

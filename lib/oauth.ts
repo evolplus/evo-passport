@@ -10,7 +10,7 @@ const PROVIDERS: { [key in SupportedOAuth2Provider]: OAuth2ProviderConfiguration
     strava: getConfigurationByProvider('strava', process.env.STRAVA_OAUTH2_CLIENT_ID || '', process.env.STRAVA_OAUTH2_CLIENT_SECRET || '')
 };
 
-export type SignedInCallback = (provider: string, token: TokenData | undefined, userInfo: OAuth2Profile, req: Request, resp: Response) => Promise<void>;
+export type SignedInCallback = (provider: string, token: TokenData | undefined, userInfo: OAuth2Profile | undefined, req: Request, resp: Response) => Promise<void>;
 
 export function createConfiguration(conf: OAuth2Provider): OAuth2ProviderConfiguration {
     if (typeof conf != 'string') {
