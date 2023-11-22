@@ -26,6 +26,7 @@ export type WebPassportConfig = {
     passportHost: string;
     domain: string;
     prefix: string;
+    loginConfig?: LoginConfiguration;
 }
 
 function expressMiddleware(model: PassportModel) {
@@ -78,7 +79,7 @@ function setupSessionParser(app: Application, model: PassportModel) {
     app.use(expressMiddleware(model));
 }
 
-function setup(app: Application, passportModel: PassportModel, config: WebPassportConfig, providers: OAuth2Provider[], useAsSession?: { [key: string]: boolean }, callback?: SignedInCallback, loginConfig?: LoginConfiguration) {
+function setup(app: Application, passportModel: PassportModel, config: WebPassportConfig, providers: OAuth2Provider[], useAsSession?: { [key: string]: boolean }, callback?: SignedInCallback) {
     let prefix = config.prefix.endsWith("/") ? config.prefix : config.prefix + "/",
         host = config.passportHost,
         cookieSettings = Object.assign({}, DEFAULT_SESSION_COOKIES_SETTINGS, { domain: config.domain });
@@ -118,8 +119,8 @@ function setup(app: Application, passportModel: PassportModel, config: WebPasspo
             res.redirect('/');
         }
     });
-    if (loginConfig) {
-        setupLogin(app, passportModel, host, prefix, loginConfig, (profile: OAuth2Profile, session: Session, req: Request, res: Response) => {
+    if (config.loginConfig) {
+        setupLogin(app, passportModel, host, config.domain, prefix, config.loginConfig, (profile: OAuth2Profile, session: Session, req: Request, res: Response) => {
             res.cookie(COOKIE_NAME_SESSION_ID, session.sessionId, cookieSettings);
             res.cookie(COOKIE_NAME_USER_ID, session.user.userId, cookieSettings);
             if (callback) {
