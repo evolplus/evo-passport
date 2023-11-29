@@ -1,6 +1,6 @@
 {
   "name": "@evolplus/evo-passport",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Provide another passport solution for express web server.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -30,6 +30,8 @@
     "@types/nodemailer": "^6.4.11",
     "axios": "^1.4.0",
     "express": "^4.18.2",
+    "ioredis": "^5.3.2",
+    "kafkajs": "^2.2.4",
     "mysql": "^2.18.1",
     "nodemailer": "^6.9.6"
   },
@@ -38,8 +40,8 @@
     "@types/mysql": "^2.15.22",
     "@types/node": "^20.5.6",
     "log4js-api": "^1.0.0",
-    "typescript": "^5.2.2",
-    "ts-node": "^10.9.1"
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
   },
   "directories": {
     "lib": "lib"

@@ -1,5 +1,5 @@
 import mysql, { Pool, PoolConfig } from "mysql";
-import { generateSessionId, generateUserId, PassportModel, Session, UserAccount } from "./model";
+import { generateSessionId, PassportModel, PassportStorage, Session, UserAccount } from "./model";
 import log4js from "log4js-api";
 import { OAuth2Profile, TokenData } from "@evolplus/evo-oauth2";
 
@@ -7,6 +7,8 @@ const TABLE_NAME_ACCOUNTS = "accounts";
 const TABLE_NAME_SESIONS = "sessions";
 const TABLE_NAME_OAUTH = "oauth";
 
+const CLEANUP_INTERVAL = 1000 * 60 * 60 * 24; // 1 day
+const SESSION_KEEP_ALIVE = 1000 * 60 * 60 * 24 * 30; // 1 month
 const LOGGER = log4js.getLogger("evo-passport-mysql");
 
 function dataToSession(data: any): Session | undefined {
@@ -27,12 +29,27 @@ function dataToSession(data: any): Session | undefined {
     };
 }
 
-export class MySqlPassportModel implements PassportModel {
-    private connPool: Pool;
+function accountToDBSchema(account: UserAccount): any {
+    return {
+        id: account.userId,
+        username: account.username,
+        display_name: account.displayName,
+        picture: account.profilePic,
+        email: account.email,
+        email_verified: account.emailVerified
+    };
+}
 
-    constructor(config: PoolConfig) {
+export class MySqlPassportProvider implements PassportStorage {
+    private connPool: Pool;
+    private sessionKeepAlive: number;;
+
+    constructor(config: PoolConfig, sessionKeepAlive: number = SESSION_KEEP_ALIVE) {
         this.connPool = mysql.createPool(config);
+        this.sessionKeepAlive = sessionKeepAlive;
+        this.cleanupExpiredSessions();
     }
+
     private async query(sql: string, values: any): Promise<any> {
         const conn: Pool = this.connPool;
         return new Promise((resolve, reject) => {
@@ -45,6 +62,11 @@ export class MySqlPassportModel implements PassportModel {
                 }
             })
         });
+    }
+
+    private async cleanupExpiredSessions() {
+        await this.query(`DELETE FROM ${TABLE_NAME_SESIONS} WHERE created < ?`, [Date.now() - this.sessionKeepAlive]);
+        setTimeout(() => this.cleanupExpiredSessions(), CLEANUP_INTERVAL);
     }
 
     async saveToken(userId: number, provider: string, sub: string, token: TokenData) {
@@ -103,39 +125,9 @@ export class MySqlPassportModel implements PassportModel {
         return undefined;
     }
 
-    async getOrCreateAccount(provider: string, token: TokenData | undefined, userInfo: OAuth2Profile): Promise<UserAccount> {
-        let acc = await this.queryOAuthMapping(provider, userInfo.sub!);
-        if (acc) {
-            if (token && userInfo.sub) {
-                await this.saveToken(acc.userId, provider, userInfo.sub, token);
-            }
-            return acc;
-        }
-        let account: any = {
-            id: generateUserId()
-        };
-        if (userInfo.email) {
-            account.email = userInfo.email;
-            account.email_verified = userInfo.email_verified ? true : false;
-        }
-        if (userInfo.picture) {
-            account.picture = userInfo.picture;
-        }
-        if (userInfo.name) {
-            account.display_name = userInfo.name;
-        } else {
-            account.display_name = `${provider}-${userInfo.sub}`
-        }
-        await this.query(`INSERT INTO ${TABLE_NAME_ACCOUNTS} SET ?`, account);
-        if (token) {
-            await this.saveToken(account.id, provider, userInfo.sub!, token);
-            LOGGER.info(`Created or update OAuth 2.0 profile: ${provider}/${userInfo.sub}.`);
-        }
-        return {
-            userId: account.id,
-            profilePic: account.picture,
-            displayName: account.display_name
-        }
+    async createAccount(account: UserAccount): Promise<void> {
+        await this.query(`INSERT INTO ${TABLE_NAME_ACCOUNTS} SET ?`, accountToDBSchema(account));
+        LOGGER.info(`Created new user account ${account.userId}`);
     }
 
     async loadToken(userId: number, provider: string): Promise<TokenData | undefined> {
@@ -164,4 +156,4 @@ export class MySqlPassportModel implements PassportModel {
 
 }
 
-export default MySqlPassportModel
+export default MySqlPassportProvider;
