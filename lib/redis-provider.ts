@@ -14,10 +14,31 @@ const SESSION_KEEP_ALIVE_SECONDS = 60 * 60 * 24 * 30; // 1 month
 
 type OAuthRecord = {
     userId: number;
+    token?: TokenData;
+}
+
+type TokenRecord = {
+    sub: string;
     token: TokenData;
 }
 
 const LOGGER = log4js.getLogger('redis-passport');
+
+function sessionKey(sessionId: string): string {
+    return `session:${sessionId}`;
+}
+
+function oauthMapKey(provider: string, sub: string): string {
+    return `oauth:${provider}:${sub}`;
+}
+
+function tokenKey(provider: string, userId: number): string {
+    return `token:${provider}:${userId}`;
+}
+
+function accountKey(userId: number): string {
+    return `account:${userId}`;
+}
 
 export class RedisPassportProvider implements PassportStorage {
     private redisClient: Redis;
@@ -29,7 +50,7 @@ export class RedisPassportProvider implements PassportStorage {
     }
 
     async querySessionData(sessionId: string, userId?: number): Promise<Session | undefined> {
-        const sessionData = await this.redisClient.get(`session:${sessionId}`);
+        const sessionData = await this.redisClient.get(sessionKey(sessionId));
         if (!sessionData) return undefined;
 
         const session = JSON.parse(sessionData) as Session;
@@ -40,7 +61,7 @@ export class RedisPassportProvider implements PassportStorage {
     }
 
     async saveSessionData(session: Session): Promise<boolean> {
-        await this.redisClient.set(`session:${session.sessionId}`, JSON.stringify(session), 'EX', this.sessionKeepAlive);
+        await this.redisClient.set(sessionKey(session.sessionId), JSON.stringify(session), 'EX', this.sessionKeepAlive);
         return true;
     }
 
@@ -54,47 +75,61 @@ export class RedisPassportProvider implements PassportStorage {
     }
 
     async queryOAuthMapping(provider: string, sub: string): Promise<UserAccount | undefined> {
-        const data = await this.redisClient.get(`oauth:${provider}:${sub}`);
+        const data = await this.redisClient.get(oauthMapKey(provider, sub));
         if (!data) return undefined;
         let oauth = JSON.parse(data) as OAuthRecord;
         return this.getAccountInfo(oauth.userId);
     }
 
     async getAccountInfo(userId: number): Promise<UserAccount | undefined> {
-        const userAccountData = await this.redisClient.get(`userAccount:${userId}`);
+        const userAccountData = await this.redisClient.get(accountKey(userId));
         return userAccountData ? JSON.parse(userAccountData) : undefined;
     }
 
     async createAccount(account: UserAccount): Promise<void> {
-        await this.redisClient.set(`userAccount:${account.userId}`, JSON.stringify(account));
+        await this.redisClient.set(accountKey(account.userId), JSON.stringify(account));
         LOGGER.info(`Created new user account ${account.userId}`);
     }
 
-    async saveToken(userId: number, provider: string, sub: string, token: TokenData): Promise<void> {
-        await this.redisClient.set(`sub:${provider}:${userId}`, sub);
-        await this.redisClient.set(`oauth:${provider}:${sub}`, JSON.stringify({ userId: userId, token: token }));
+    async saveToken(userId: number, provider: string, sub: string, token?: TokenData): Promise<void> {
+        await this.redisClient.set(oauthMapKey(provider, sub), JSON.stringify({ userId: userId }));
+        await this.redisClient.set(tokenKey(provider, userId), JSON.stringify({ sub: sub, token: token }));
         LOGGER.info(`Saved token for ${provider}:${sub}`);
     }
 
     async loadToken(userId: number, provider: string): Promise<TokenData | undefined> {
-        let sub = await this.redisClient.get(`sub:${provider}:${userId}`);
-        if (!sub) return undefined;
-        return this.queryToken(provider, sub);
+        let data = await this.redisClient.get(tokenKey(provider, userId));
+        if (!data) return undefined;
+        return (JSON.parse(data) as TokenRecord).token;
     }
 
     async queryToken(provider: string, sub: string): Promise<TokenData | undefined> {
-        let tokenData = await this.redisClient.get(`oauth:${provider}:${sub}`);
-        if (!tokenData) return undefined;
-        return (JSON.parse(tokenData) as OAuthRecord).token;
+        let data = await this.redisClient.get(oauthMapKey(provider, sub));
+        if (!data) return undefined;
+        return this.loadToken((JSON.parse(data) as OAuthRecord).userId, provider);
     }
 
     async queryProfile(provider: string, userId: number): Promise<OAuth2Profile | undefined> {
-        let sub = await this.redisClient.get(`sub:${provider}:${userId}`);
-        if (!sub) return undefined;
-        return {
-            sub: sub
+        let tokenRec = await this.redisClient.get(tokenKey(provider, userId));
+        if (!tokenRec) return undefined;
+        try {
+            return {
+                sub: JSON.parse(tokenRec).sub
+            }
+        } catch (err) {
+            LOGGER.error(`Failed to parse token record for ${provider}:${userId}.`, err);
+            return undefined;
         }
     }
+
+    async disconnect(provider: string, userId: number): Promise<boolean> {
+        let profile = await this.queryProfile(provider, userId);
+        if (!profile) return false;
+        await this.redisClient.del(tokenKey(provider, userId));
+        await this.redisClient.del(oauthMapKey(provider, profile.sub));
+        return true;
+    }
+
 }
 
 export default RedisPassportProvider;

@@ -9,7 +9,6 @@ import { LRUCache } from '@evolplus/evo-utils';
 import { LoginConfiguration, setupLogin } from './login';
 import { Kafka } from 'kafkajs';
 import { randomInt } from 'crypto';
-import { run } from 'node:test';
 
 const COOKIE_NAME_SESSION_ID = "epssid";
 const COOKIE_NAME_USER_ID = "epuid";
@@ -146,7 +145,7 @@ function setup(app: Application, passportModel: PassportModel, config: WebPasspo
                     await passportModel.saveToken(req.session.user.userId, provider, userInfo.sub, token);
                 }
                 if (callback) {
-                    callback(provider, token, userInfo, req, res);
+                    await callback(provider, token, userInfo, req, res);
                 }
                 if (!(res.writableEnded || res.headersSent)) {
                     res.redirect('/');

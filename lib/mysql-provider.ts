@@ -69,14 +69,13 @@ export class MySqlPassportProvider implements PassportStorage {
         setTimeout(() => this.cleanupExpiredSessions(), CLEANUP_INTERVAL);
     }
 
-    async saveToken(userId: number, provider: string, sub: string, token: TokenData) {
+    async saveToken(userId: number, provider: string, sub: string, token?: TokenData) {
         let rs = await this.query(`INSERT INTO ${TABLE_NAME_OAUTH} SET ? ON DUPLICATE KEY UPDATE ?`, [
             { token: JSON.stringify(token), user_id: userId, provider, sub },
             { token: JSON.stringify(token) }]);
         LOGGER.info(`Save token of user ${userId} successfully.`);
         return rs;
     }
-
 
     async querySessionData(sessionId: string, userId: number | undefined): Promise<Session | undefined> {
         if (sessionId) {
@@ -152,6 +151,11 @@ export class MySqlPassportProvider implements PassportStorage {
                 sub: rs[0].sub
             }
         }
+    }
+
+    async disconnect(provider: string, userId: number): Promise<boolean> {
+        let rs = await this.query(`DELETE FROM ${TABLE_NAME_OAUTH} WHERE user_id=? AND provider=?`, [userId, provider]);
+        return rs.affectedRows > 0;
     }
 
 }

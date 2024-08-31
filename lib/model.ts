@@ -29,10 +29,11 @@ export interface PassportStorage {
     queryOAuthMapping(provider: string, sub: string): Promise<UserAccount | undefined>;
     getAccountInfo(userId: number): Promise<UserAccount | undefined>;
     createAccount(account: UserAccount): Promise<void>
-    saveToken(userId: number, provider: string, sub: string, token: TokenData): Promise<void>;
+    saveToken(userId: number, provider: string, sub: string, token?: TokenData): Promise<void>;
     loadToken(userId: number, provider: string): Promise<TokenData | undefined>;
     queryToken(provider: string, sub: string): Promise<TokenData | undefined>;
     queryProfile(provider: string, userId: number): Promise<OAuth2Profile | undefined>;
+    disconnect(provider: string, userId: number): Promise<boolean>;
 }
 
 function generateUserId(): number {
@@ -113,14 +114,12 @@ export class PassportModel {
             account.displayName = `${provider}-${userInfo.sub}`
         }
         await this.storage.createAccount(account);
-        if (token) {
-            await this.saveToken(account.userId, provider, userInfo.sub!, token);
-            LOGGER.info(`Created or update OAuth 2.0 profile: ${provider}/${userInfo.sub}.`);
-        }
+        await this.saveToken(account.userId, provider, userInfo.sub!, token);
+        LOGGER.info(`Created or update OAuth 2.0 profile: ${provider}/${userInfo.sub}.`);
         return account;
     }
 
-    async saveToken(userId: number, provider: string, sub: string, token: TokenData): Promise<void> {
+    async saveToken(userId: number, provider: string, sub: string, token?: TokenData): Promise<void> {
         return await this.storage.saveToken(userId, provider, sub, token);
     }
 
@@ -134,6 +133,10 @@ export class PassportModel {
 
     async queryProfile(provider: string, userId: number): Promise<OAuth2Profile | undefined> {
         return await this.storage.queryProfile(provider, userId);
+    }
+
+    async disconnect(provider: string, userId: number): Promise<boolean> {
+        return await this.storage.disconnect(provider, userId);
     }
 }
 
