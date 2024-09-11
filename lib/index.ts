@@ -82,6 +82,31 @@ function expressMiddleware(model: PassportModel, config: WebPassportConfig) {
                 next();
             }
         } else {
+            if (req.headers.authorization) {
+                let parts = req.headers.authorization.split(' ');
+                if (parts.length === 2 && parts[0] === 'Bearer') {
+                    let token = atob(parts[1]),
+                        [sessionId, userId] = token.split(':');
+                    if (userId && validateSessionId(sessionId, parseInt(userId))) {
+                        model.querySessionData(sessionId, parseInt(userId))
+                            .then(session => {
+                                if (session) {
+                                    req.session = session;
+                                    sessionCache.put(session.sessionId, session);
+                                    LOGGER.debug(`Session found for user ${userId}.`);
+                                } else {
+                                    LOGGER.warn(`Session not found for user ${userId}.`);
+                                }
+                                next();
+                            })
+                            .catch((reason) => {
+                                LOGGER.error(`Error query session data: ${reason}.`);
+                                next();
+                            });
+                        return;
+                    }
+                }
+            }
             next();
         }
     }
@@ -139,8 +164,14 @@ function setup(app: Application, passportModel: PassportModel, config: WebPasspo
                 if (useAsSession && useAsSession[conf.providerName]) {
                     let account = await passportModel.getOrCreateAccount(provider, token, userInfo),
                         session = await passportModel.generateSession(account);
-                    res.cookie(COOKIE_NAME_SESSION_ID, session.sessionId, cookieSettings);
-                    res.cookie(COOKIE_NAME_USER_ID, account.userId, cookieSettings);
+                    if (req.query['mode'] == 'client') {
+                        res.json({access_token: btoa(`${session.sessionId}:${account.userId}`), user_id: session.user.userId, session_id: session.sessionId});
+                        res.end();
+                        return;
+                    } else {
+                        res.cookie(COOKIE_NAME_SESSION_ID, session.sessionId, cookieSettings);
+                        res.cookie(COOKIE_NAME_USER_ID, account.userId, cookieSettings);
+                    }
                 } else if (req.session && token && userInfo.sub) {
                     await passportModel.saveToken(req.session.user.userId, provider, userInfo.sub, token);
                 }
