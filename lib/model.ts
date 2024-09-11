@@ -1,10 +1,10 @@
-import { randomBytes, randomInt } from "crypto";
+import { randomBytes, randomInt, createHmac } from "crypto";
 import log4js from "log4js-api";
 import { OAuth2Profile, TokenData } from "@evolplus/evo-oauth2";
 
 const MAX_ID = 281474976710655; // 2^48 - 1
 const SESSION_PREFIX_LENGTH = 6;
-const SESSION_ROTATE_NUMBER = 65521;
+const PASSPORT_SECRET_KEY = process.env.PASSPORT_SESSION_SECRET;
 
 const LOGGER = log4js.getLogger("evo-passport");
 
@@ -40,31 +40,60 @@ function generateUserId(): number {
     return randomInt(MAX_ID);
 }
 
+// Generates a session ID using HMAC-SHA256
 export function generateSessionId(userId: number): string {
-    let bytes = randomBytes(SESSION_PREFIX_LENGTH),
-        crc = 0;
-    for (var i = 0; i < SESSION_PREFIX_LENGTH; i++) {
-        crc = (crc * 2 + bytes[i]) % SESSION_ROTATE_NUMBER;
+    if (!PASSPORT_SECRET_KEY) {
+        throw new Error("PASSPORT_SESSION_SECRET is not set.");
     }
-    crc = (crc * 2 + userId) % SESSION_ROTATE_NUMBER;
-    return Buffer.concat([bytes, new Uint8Array([crc >> 8, crc % 256])]).toString("hex");
+    // Generate random bytes for the session prefix
+    const prefix = randomBytes(SESSION_PREFIX_LENGTH);
+    
+    // Create an HMAC using SHA-256 with the secret key
+    const hmac = createHmac('sha256', PASSPORT_SECRET_KEY);
+    hmac.update(prefix);
+    hmac.update(userId.toString());
+    
+    // Compute the HMAC digest
+    const signature = hmac.digest();
+    
+    // Return the prefix and the HMAC signature as the session ID
+    return Buffer.concat([prefix, signature]).toString('hex');
 }
 
+// Validates the session ID using HMAC-SHA256
 export function validateSessionId(sessionId: string, userId: number): boolean {
+    if (!PASSPORT_SECRET_KEY) {
+        throw new Error("PASSPORT_SESSION_SECRET is not set.");
+    }
     try {
-        let buff = Buffer.from(sessionId, "hex");
-        if (buff.length != SESSION_PREFIX_LENGTH + 2) {
-            return false;
-        }
-        let crc = 0;
-        for (var i = 0; i < SESSION_PREFIX_LENGTH; i++) {
-            crc = (crc * 2 + buff[i]) % SESSION_ROTATE_NUMBER;
-        }
-        crc = (crc * 2 + userId) % SESSION_ROTATE_NUMBER;
-        return buff[SESSION_PREFIX_LENGTH] == (crc >> 8) && buff[SESSION_PREFIX_LENGTH + 1] == (crc % 256);
+        // Decode the session ID
+        const buff = Buffer.from(sessionId, 'hex');
+        const prefix = buff.slice(0, SESSION_PREFIX_LENGTH);
+        const signature = buff.slice(SESSION_PREFIX_LENGTH);
+        
+        // Recompute the HMAC based on the prefix and userId
+        const hmac = createHmac('sha256', PASSPORT_SECRET_KEY);
+        hmac.update(prefix);
+        hmac.update(userId.toString());
+        const validSignature = hmac.digest();
+        
+        // Compare the signatures securely
+        return timingSafeEqual(signature, validSignature);
     } catch (e) {
         return false;
     }
+}
+
+// Helper function to prevent timing attacks during comparison
+function timingSafeEqual(a: Buffer, b: Buffer): boolean {
+    if (a.length !== b.length) {
+        return false;
+    }
+    let result = 0;
+    for (let i = 0; i < a.length; i++) {
+        result |= a[i] ^ b[i];
+    }
+    return result === 0;
 }
 
 export class PassportModel {
