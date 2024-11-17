@@ -1,4 +1,4 @@
-import { Redis } from 'ioredis';
+import { Redis, Cluster } from 'ioredis';
 import { PassportModel, PassportStorage, Session, UserAccount, generateSessionId } from './model';
 import log4js from 'log4js-api';
 import { TokenData, OAuth2Profile } from '@evolplus/evo-oauth2';
@@ -6,6 +6,12 @@ import { TokenData, OAuth2Profile } from '@evolplus/evo-oauth2';
 export interface RedisConfig {
     host: string;
     port: number;
+    password?: string;
+    db?: number;
+}
+
+export interface RedisClusterConfig {
+    nodes: { host: string, port: number }[];
     password?: string;
     db?: number;
 }
@@ -40,12 +46,22 @@ function accountKey(userId: number): string {
     return `account:${userId}`;
 }
 
+//TODO: options to use both Redis node and Redis cluster, prefix for keys
 export class RedisPassportProvider implements PassportStorage {
-    private redisClient: Redis;
+    private redisClient: Redis | Cluster;
     private sessionKeepAlive: number;
 
-    constructor(redisConfig: RedisConfig, sessionKeepAlive: number = SESSION_KEEP_ALIVE_SECONDS) {
-        this.redisClient = new Redis(redisConfig);
+    constructor(redisConfig: RedisConfig | RedisClusterConfig, sessionKeepAlive: number = SESSION_KEEP_ALIVE_SECONDS) {
+        if ('nodes' in redisConfig) {
+            this.redisClient = new Redis.Cluster(redisConfig.nodes, {
+                redisOptions: {
+                    password: redisConfig.password,
+                    db: redisConfig.db
+                }
+            });
+        } else {
+            this.redisClient = new Redis(redisConfig);
+        }
         this.sessionKeepAlive = sessionKeepAlive;
     }
 
