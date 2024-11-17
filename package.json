@@ -1,6 +1,6 @@
 {
   "name": "@evolplus/evo-passport",
-  "version": "1.1.2",
+  "version": "1.2.1",
   "description": "Provide another passport solution for express web server.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
